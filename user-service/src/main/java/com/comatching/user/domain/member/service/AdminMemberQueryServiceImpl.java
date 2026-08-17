@@ -42,7 +42,7 @@ public class AdminMemberQueryServiceImpl implements AdminMemberQueryService {
 	@Override
 	public AdminUserProfileDto getUserDetail(Long memberId) {
 		Member member = memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER)
-			.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_EXIST));
+			.orElseThrow(() -> new BusinessException(UserErrorCode.TARGET_USER_NOT_FOUND));
 
 		return toAdminUserProfileDto(member);
 	}

@@ -18,11 +18,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.comatching.common.domain.enums.Gender;
 import com.comatching.common.domain.enums.ItemType;
+import com.comatching.common.dto.item.AdminInventoryAction;
+import com.comatching.common.dto.item.AdminInventoryUpdateRequest;
 import com.comatching.common.dto.member.AdminUserProfileDto;
 import com.comatching.common.dto.response.PagingResponse;
 import com.comatching.common.exception.BusinessException;
-import com.comatching.item.domain.admin.dto.AdminInventoryAction;
-import com.comatching.item.domain.admin.dto.AdminInventoryUpdateRequest;
 import com.comatching.item.domain.admin.dto.AdminUserDetailResponse;
 import com.comatching.item.domain.admin.dto.AdminUserSummaryResponse;
 import com.comatching.item.domain.item.repository.ItemRepository;

@@ -1,7 +1,9 @@
 package com.comatching.user.domain.member.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,9 +23,11 @@ import com.comatching.common.domain.enums.MemberRole;
 import com.comatching.common.domain.enums.MemberStatus;
 import com.comatching.common.dto.member.AdminUserProfileDto;
 import com.comatching.common.dto.response.PagingResponse;
+import com.comatching.common.exception.BusinessException;
 import com.comatching.user.domain.member.entity.Member;
 import com.comatching.user.domain.member.entity.Profile;
 import com.comatching.user.domain.member.repository.MemberRepository;
+import com.comatching.user.global.exception.UserErrorCode;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AdminMemberQueryServiceImpl 테스트")
@@ -90,6 +94,52 @@ class AdminMemberQueryServiceImplTest {
 		assertThat(result.email()).isEqualTo("detail@test.com");
 		assertThat(result.realName()).isEqualTo("김상세");
 		assertThat(result.nickname()).isEqualTo("상세유저");
+	}
+
+	@Test
+	@DisplayName("keyword 앞뒤 공백을 제거해서 저장소로 전달한다")
+	void shouldTrimKeywordBeforeQuery() {
+		// given
+		PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
+		given(memberRepository.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, "nickname", pageable))
+			.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+		// when
+		adminMemberQueryService.getUsers("  nickname  ", pageable);
+
+		// then
+		then(memberRepository).should()
+			.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, "nickname", pageable);
+	}
+
+	@Test
+	@DisplayName("빈 문자열 keyword는 null로 정규화해서 전달한다")
+	void shouldNormalizeBlankKeywordToNull() {
+		// given
+		PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
+		given(memberRepository.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, null, pageable))
+			.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+		// when
+		adminMemberQueryService.getUsers("   ", pageable);
+
+		// then
+		then(memberRepository).should()
+			.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, null, pageable);
+	}
+
+	@Test
+	@DisplayName("존재하지 않는 사용자 상세 조회는 TARGET_USER_NOT_FOUND 예외가 발생한다")
+	void shouldThrowWhenUserNotFound() {
+		// given
+		given(memberRepository.findAdminMemberById(99L, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.empty());
+
+		// when & then
+		assertThatThrownBy(() -> adminMemberQueryService.getUserDetail(99L))
+			.isInstanceOf(BusinessException.class)
+			.extracting(e -> ((BusinessException)e).getErrorCode())
+			.isEqualTo(UserErrorCode.TARGET_USER_NOT_FOUND);
 	}
 
 	private static Member createMemberWithProfile(

@@ -1,9 +1,9 @@
-package com.comatching.item.domain.admin.dto;
+package com.comatching.common.dto.item;
 
 import com.comatching.common.domain.enums.ItemType;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 

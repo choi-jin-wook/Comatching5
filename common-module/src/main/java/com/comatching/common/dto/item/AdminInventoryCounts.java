@@ -1,4 +1,4 @@
-package com.comatching.item.domain.admin.dto;
+package com.comatching.common.dto.item;
 
 public record AdminInventoryCounts(
 	long matchingTicketCount,

@@ -7,9 +7,9 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import com.comatching.common.dto.item.AdminInventoryUpdateRequest;
 import com.comatching.common.exception.BusinessException;
 import com.comatching.common.exception.code.GeneralErrorCode;
-import com.comatching.item.domain.admin.dto.AdminInventoryUpdateRequest;
 import com.comatching.item.global.exception.ItemErrorCode;
 
 import lombok.RequiredArgsConstructor;

@@ -8,10 +8,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.comatching.common.annotation.DistributedLock;
+import com.comatching.common.dto.item.AdminInventoryAction;
+import com.comatching.common.dto.item.AdminInventoryUpdateRequest;
 import com.comatching.common.exception.BusinessException;
 import com.comatching.common.exception.code.GeneralErrorCode;
-import com.comatching.item.domain.admin.dto.AdminInventoryAction;
-import com.comatching.item.domain.admin.dto.AdminInventoryUpdateRequest;
 import com.comatching.item.domain.item.entity.Item;
 import com.comatching.item.domain.item.enums.ItemHistoryType;
 import com.comatching.item.domain.item.repository.ItemRepository;

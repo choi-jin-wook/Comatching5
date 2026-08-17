@@ -1,6 +1,7 @@
 package com.comatching.item.domain.admin.dto;
 
 import com.comatching.common.domain.enums.Gender;
+import com.comatching.common.dto.item.AdminInventoryCounts;
 import com.comatching.common.dto.member.AdminUserProfileDto;
 
 public record AdminUserSummaryResponse(

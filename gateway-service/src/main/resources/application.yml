@@ -88,6 +88,13 @@ spring:
               filters:
                 - RewritePath=/chat-doc/(?<segment>.*), /$\{segment}
 
+            - id: user-service-admin
+              uri: http://localhost:9000
+              predicates:
+                - Path=/api/admin/users, /api/admin/users/**
+              filters:
+                - AuthorizationHeaderFilter
+
             - id: item-service
               uri: http://localhost:9006
               predicates:

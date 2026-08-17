@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.comatching.common.domain.enums.ItemType;
-import com.comatching.item.domain.admin.dto.AdminInventoryCounts;
+import com.comatching.common.dto.item.AdminInventoryCounts;
 import com.comatching.item.domain.item.repository.ItemRepository;
 
 import lombok.RequiredArgsConstructor;

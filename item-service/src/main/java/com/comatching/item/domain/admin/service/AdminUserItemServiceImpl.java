@@ -11,12 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.comatching.common.domain.enums.ItemType;
+import com.comatching.common.dto.item.AdminInventoryCounts;
+import com.comatching.common.dto.item.AdminInventoryUpdateRequest;
 import com.comatching.common.dto.member.AdminUserProfileDto;
 import com.comatching.common.dto.response.PagingResponse;
 import com.comatching.common.exception.BusinessException;
 import com.comatching.common.exception.code.GeneralErrorCode;
-import com.comatching.item.domain.admin.dto.AdminInventoryCounts;
-import com.comatching.item.domain.admin.dto.AdminInventoryUpdateRequest;
 import com.comatching.item.domain.admin.dto.AdminUserDetailResponse;
 import com.comatching.item.domain.admin.dto.AdminUserSummaryResponse;
 import com.comatching.item.domain.item.repository.ItemRepository;

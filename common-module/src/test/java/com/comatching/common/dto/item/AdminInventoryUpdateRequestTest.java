@@ -1,4 +1,4 @@
-package com.comatching.item.domain.admin.dto;
+package com.comatching.common.dto.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
