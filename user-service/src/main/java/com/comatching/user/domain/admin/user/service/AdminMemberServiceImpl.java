@@ -51,7 +51,7 @@ public class AdminMemberServiceImpl implements AdminMemberService {
 			.map(this::toAdminUserProfileDto);
 
 		List<AdminUserProfileDto> users = userPage.getContent();
-		Map<Long, AdminInventoryCounts> inventoryCountsByMemberId = itemAdminClient.getInventoryCounts(
+		Map<Long, AdminInventoryCounts> inventoryCountsByMemberId = getInventoryCountsOrThrow(
 				users.stream()
 						.map(AdminUserProfileDto::id)
 						.toList()
@@ -86,7 +86,7 @@ public class AdminMemberServiceImpl implements AdminMemberService {
 			.orElseThrow(() -> new BusinessException(UserErrorCode.TARGET_USER_NOT_FOUND));
 		AdminUserProfileDto user = toAdminUserProfileDto(member);
 
-		Map<Long, AdminInventoryCounts> inventoryCountsByMemberId = itemAdminClient.getInventoryCounts(List.of(memberId));
+		Map<Long, AdminInventoryCounts> inventoryCountsByMemberId = getInventoryCountsOrThrow(List.of(memberId));
 		AdminInventoryCounts inventoryCounts = inventoryCountsByMemberId.getOrDefault(memberId, AdminInventoryCounts.empty());
 
 		return AdminUserDetailResponse.from(user, inventoryCounts);
@@ -130,6 +130,19 @@ public class AdminMemberServiceImpl implements AdminMemberService {
 			member.getProfile().getGender(),
 			member.getProfile().getProfileImageUrl()
 		);
+	}
+
+	private Map<Long, AdminInventoryCounts> getInventoryCountsOrThrow(List<Long> memberIds) {
+		try {
+			return itemAdminClient.getInventoryCounts(memberIds);
+		} catch (DecodeException e) {
+			log.warn("Admin inventory count decode failed. memberIds={}", memberIds, e);
+			throw new BusinessException(UserErrorCode.USER_QUERY_FAILED);
+		} catch (FeignException e) {
+			log.warn("Admin inventory count query failed. memberIds={}, status={}, body={}",
+				memberIds, e.status(), e.contentUTF8(), e);
+			throw new BusinessException(UserErrorCode.USER_QUERY_FAILED);
+		}
 	}
 
 

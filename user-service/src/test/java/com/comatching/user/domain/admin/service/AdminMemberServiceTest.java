@@ -16,6 +16,8 @@ import com.comatching.user.domain.admin.user.service.AdminMemberServiceImpl;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +35,7 @@ import com.comatching.common.exception.BusinessException;
 import com.comatching.user.domain.admin.user.dto.AdminInventoryAction;
 import com.comatching.user.domain.admin.user.dto.AdminInventoryCounts;
 import com.comatching.user.domain.admin.user.dto.AdminInventoryUpdateRequest;
+import com.comatching.user.domain.admin.user.dto.AdminUserDetailResponse;
 import com.comatching.user.domain.admin.user.dto.AdminUserSummaryResponse;
 import com.comatching.user.domain.member.entity.Member;
 import com.comatching.user.domain.member.entity.Profile;
@@ -81,6 +84,10 @@ class AdminMemberServiceTest {
 		AdminUserSummaryResponse first = result.content().get(0);
 		assertThat(first.id()).isEqualTo(1L);
 		assertThat(first.email()).isEqualTo("user1@test.com");
+		assertThat(first.realName()).isEqualTo("홍길동");
+		assertThat(first.nickname()).isEqualTo("닉네임1");
+		assertThat(first.gender()).isEqualTo(Gender.FEMALE);
+		assertThat(first.profileImageUrl()).isEqualTo("https://img1");
 		assertThat(first.matchingTicketCount()).isEqualTo(3L);
 		assertThat(first.optionTicketCount()).isEqualTo(1L);
 
@@ -88,6 +95,190 @@ class AdminMemberServiceTest {
 		assertThat(second.id()).isEqualTo(2L);
 		assertThat(second.matchingTicketCount()).isZero();
 		assertThat(second.optionTicketCount()).isZero();
+	}
+
+	@Test
+	@DisplayName("사용자 상세 조회 시 사용자 정보와 타입별 아이템 수량을 함께 반환한다")
+	void shouldReturnUserDetailWithInventory() {
+		// given
+		Long memberId = 11L;
+		Member member = createMemberWithProfile(
+			memberId, "user@comatching.com", "박유저", "유저", Gender.FEMALE, "https://img2"
+		);
+		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.of(member));
+		given(itemAdminClient.getInventoryCounts(List.of(memberId)))
+			.willReturn(Map.of(memberId, new AdminInventoryCounts(3L, 0L)));
+
+		// when
+		AdminUserDetailResponse result = adminMemberService.getUserDetail(memberId);
+
+		// then
+		assertThat(result.id()).isEqualTo(memberId);
+		assertThat(result.email()).isEqualTo("user@comatching.com");
+		assertThat(result.realName()).isEqualTo("박유저");
+		assertThat(result.nickname()).isEqualTo("유저");
+		assertThat(result.gender()).isEqualTo(Gender.FEMALE);
+		assertThat(result.profileImageUrl()).isEqualTo("https://img2");
+		assertThat(result.matchingTicketCount()).isEqualTo(3L);
+		assertThat(result.optionTicketCount()).isZero();
+	}
+
+	@Test
+	@DisplayName("대상 사용자가 존재하면 인벤토리 조정을 item-service에 위임한다")
+	void shouldAdjustInventoryWhenMemberExists() {
+		// given
+		Long adminId = 900L;
+		Long memberId = 15L;
+		Member member = createMemberWithProfile(memberId, "u@u.com", "유저", "u", Gender.MALE, "https://img");
+		AdminInventoryUpdateRequest request = new AdminInventoryUpdateRequest(
+			ItemType.MATCHING_TICKET, 3, AdminInventoryAction.ADD, "보상 지급"
+		);
+
+		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.of(member));
+
+		// when
+		assertThatCode(() -> adminMemberService.updateUserInventory(adminId, memberId, request))
+			.doesNotThrowAnyException();
+
+		// then
+		then(itemAdminClient).should().adjustInventory(memberId, adminId, request);
+	}
+
+	@Test
+	@DisplayName("REMOVE 액션도 item-service 인벤토리 조정에 위임한다")
+	void shouldRemoveInventoryWhenActionIsRemove() {
+		// given
+		Long adminId = 901L;
+		Long memberId = 21L;
+		AdminInventoryUpdateRequest request = new AdminInventoryUpdateRequest(
+			ItemType.MATCHING_TICKET, 2, AdminInventoryAction.REMOVE, "오지급 회수"
+		);
+		Member member = createMemberWithProfile(memberId, "u@u.com", "유저", "u", Gender.MALE, "https://img");
+		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.of(member));
+
+		// when
+		adminMemberService.updateUserInventory(adminId, memberId, request);
+
+		// then
+		then(itemAdminClient).should().adjustInventory(memberId, adminId, request);
+	}
+
+	@Test
+	@DisplayName("memberId가 1 미만이면 인벤토리 수정에 실패한다")
+	void shouldThrowWhenMemberIdIsInvalid() {
+		// given
+		AdminInventoryUpdateRequest request = new AdminInventoryUpdateRequest(
+			ItemType.MATCHING_TICKET, 1, AdminInventoryAction.ADD, "테스트"
+		);
+		given(memberRepository.findAdminMemberById(0L, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.empty());
+
+		// when & then
+		assertThatThrownBy(() -> adminMemberService.updateUserInventory(900L, 0L, request))
+			.isInstanceOf(BusinessException.class);
+		then(itemAdminClient).shouldHaveNoInteractions();
+	}
+
+	@Test
+	@DisplayName("상세 조회 대상 사용자가 없으면 TARGET_USER_NOT_FOUND를 반환한다")
+	void shouldThrowTargetUserNotFoundWhenDetailMemberIsMissing() {
+		given(memberRepository.findAdminMemberById(99L, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.empty());
+
+		assertThatThrownBy(() -> adminMemberService.getUserDetail(99L))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(UserErrorCode.TARGET_USER_NOT_FOUND);
+		then(itemAdminClient).shouldHaveNoInteractions();
+	}
+
+	@Test
+	@DisplayName("상세 조회 인벤토리 응답에 사용자가 없으면 수량을 0으로 채운다")
+	void shouldFallbackToEmptyInventoryWhenDetailInventoryIsMissing() {
+		Long memberId = 11L;
+		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.of(createMemberWithProfile(memberId, "u@u.com", "유저", "u", Gender.MALE, "https://img")));
+		given(itemAdminClient.getInventoryCounts(List.of(memberId))).willReturn(Map.of());
+
+		AdminUserDetailResponse result = adminMemberService.getUserDetail(memberId);
+
+		assertThat(result.matchingTicketCount()).isZero();
+		assertThat(result.optionTicketCount()).isZero();
+	}
+
+	@Test
+	@DisplayName("목록 조회 결과가 비어 있어도 빈 ID 목록으로 item-service 수량을 조회한다")
+	void shouldHandleEmptyUserListSafely() {
+		PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
+		given(memberRepository.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, null, pageable))
+			.willReturn(new PageImpl<>(List.of(), pageable, 0));
+		given(itemAdminClient.getInventoryCounts(List.of())).willReturn(Map.of());
+
+		PagingResponse<AdminUserSummaryResponse> result = adminMemberService.getUsers(null, pageable);
+
+		assertThat(result.content()).isEmpty();
+		then(itemAdminClient).should().getInventoryCounts(List.of());
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = {400, 500})
+	@DisplayName("목록 조회 중 item-service가 4xx 또는 5xx를 반환하면 USER_QUERY_FAILED로 변환한다")
+	void shouldConvertListInventoryFeignError(int status) {
+		PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
+		given(memberRepository.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, null, pageable))
+			.willReturn(new PageImpl<>(List.of(), pageable, 0));
+		willThrow(feignException(status)).given(itemAdminClient).getInventoryCounts(List.of());
+
+		assertThatThrownBy(() -> adminMemberService.getUsers(null, pageable))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(UserErrorCode.USER_QUERY_FAILED);
+	}
+
+	@Test
+	@DisplayName("목록 조회 중 item-service 응답 디코딩에 실패하면 USER_QUERY_FAILED로 변환한다")
+	void shouldConvertListInventoryDecodeError() {
+		PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
+		given(memberRepository.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, null, pageable))
+			.willReturn(new PageImpl<>(List.of(), pageable, 0));
+		willThrow(decodeException()).given(itemAdminClient).getInventoryCounts(List.of());
+
+		assertThatThrownBy(() -> adminMemberService.getUsers(null, pageable))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(UserErrorCode.USER_QUERY_FAILED);
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = {400, 500})
+	@DisplayName("상세 조회 중 item-service가 4xx 또는 5xx를 반환하면 USER_QUERY_FAILED로 변환한다")
+	void shouldConvertDetailInventoryFeignError(int status) {
+		Long memberId = 11L;
+		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.of(createMemberWithProfile(memberId, "u@u.com", "유저", "u", Gender.MALE, "https://img")));
+		willThrow(feignException(status)).given(itemAdminClient).getInventoryCounts(List.of(memberId));
+
+		assertThatThrownBy(() -> adminMemberService.getUserDetail(memberId))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(UserErrorCode.USER_QUERY_FAILED);
+	}
+
+	@Test
+	@DisplayName("상세 조회 중 item-service 응답 디코딩에 실패하면 USER_QUERY_FAILED로 변환한다")
+	void shouldConvertDetailInventoryDecodeError() {
+		Long memberId = 11L;
+		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
+			.willReturn(Optional.of(createMemberWithProfile(memberId, "u@u.com", "유저", "u", Gender.MALE, "https://img")));
+		willThrow(decodeException()).given(itemAdminClient).getInventoryCounts(List.of(memberId));
+
+		assertThatThrownBy(() -> adminMemberService.getUserDetail(memberId))
+			.isInstanceOf(BusinessException.class)
+			.extracting("errorCode")
+			.isEqualTo(UserErrorCode.USER_QUERY_FAILED);
 	}
 
 	@Test
@@ -142,28 +333,6 @@ class AdminMemberServiceTest {
 		// then
 		then(memberRepository).should()
 			.searchMembersForAdmin(MemberStatus.ACTIVE, MemberRole.ROLE_USER, null, pageable);
-	}
-
-	@Test
-	@DisplayName("대상 사용자가 존재하면 인벤토리 조정을 item-service에 위임한다")
-	void shouldAdjustInventoryWhenMemberExists() {
-		// given
-		Long adminId = 900L;
-		Long memberId = 15L;
-		Member member = createMemberWithProfile(memberId, "u@u.com", "유저", "u", Gender.MALE, "https://img");
-		AdminInventoryUpdateRequest request = new AdminInventoryUpdateRequest(
-			ItemType.MATCHING_TICKET, 3, AdminInventoryAction.ADD, "보상 지급"
-		);
-
-		given(memberRepository.findAdminMemberById(memberId, MemberStatus.ACTIVE, MemberRole.ROLE_USER))
-			.willReturn(Optional.of(member));
-
-		// when
-		assertThatCode(() -> adminMemberService.updateUserInventory(adminId, memberId, request))
-			.doesNotThrowAnyException();
-
-		// then
-		then(itemAdminClient).should().adjustInventory(memberId, adminId, request);
 	}
 
 	@Test

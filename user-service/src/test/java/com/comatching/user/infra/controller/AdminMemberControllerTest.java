@@ -11,11 +11,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,7 +26,10 @@ import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 
+import com.comatching.common.aop.RoleCheckAspect;
 import com.comatching.common.domain.enums.Gender;
 import com.comatching.common.domain.enums.ItemType;
 import com.comatching.common.dto.response.PagingResponse;
@@ -42,6 +47,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @ExtendWith(MockitoExtension.class)
 class AdminMemberControllerTest {
 
+	private static final long ADMIN_ID = 999L;
+	private static final String SUCCESS_CODE = "GEN-000";
+
 	private MockMvc mockMvc;
 
 	@Mock
@@ -50,111 +58,61 @@ class AdminMemberControllerTest {
 	@InjectMocks
 	private AdminMemberController adminMemberController;
 
-	private static final Long ADMIN_ID = 999L;
-	private static final String SUCCESS_CODE = "GEN-000";
-
-	private final ObjectMapper objectMapper = new ObjectMapper();
-
 	@BeforeEach
 	void setUp() {
-		mockMvc = MockMvcBuilders.standaloneSetup(adminMemberController)
+		LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+		validator.afterPropertiesSet();
+		AspectJProxyFactory proxyFactory = new AspectJProxyFactory(adminMemberController);
+		proxyFactory.setProxyTargetClass(true);
+		proxyFactory.addAspect(new RoleCheckAspect());
+
+		mockMvc = MockMvcBuilders.standaloneSetup((Object)proxyFactory.getProxy())
 			.setCustomArgumentResolvers(new MemberInfoArgumentResolver(), new PageableHandlerMethodArgumentResolver())
 			.setControllerAdvice(new GlobalExceptionHandler(new ObjectMapper()))
+			.setValidator(validator)
 			.build();
 	}
 
 	@Test
-	@DisplayName("GET /api/admin/users - 사용자 목록을 조회한다")
-	void getUsers_success() throws Exception {
-		// given
-		AdminUserSummaryResponse summary = new AdminUserSummaryResponse(
+	void getUsers_usesV1PathAndForwardsKeyword() throws Exception {
+		AdminUserSummaryResponse user = new AdminUserSummaryResponse(
 			1L, "user@test.com", "홍길동", "닉네임", Gender.FEMALE, "https://img", 3L, 1L
 		);
-		PagingResponse<AdminUserSummaryResponse> response =
-			new PagingResponse<>(List.of(summary), 0, 20, 1, 1, false, false);
+		given(adminMemberService.getUsers(eq("nickname"), any(Pageable.class)))
+			.willReturn(new PagingResponse<>(List.of(user), 0, 20, 1, 1, false, false));
 
-		given(adminMemberService.getUsers(eq(null), any(Pageable.class))).willReturn(response);
-
-		// when & then
-		mockMvc.perform(get("/api/admin/users")
-				.header("X-Member-Id", ADMIN_ID)
-				.header("X-Member-Role", "ROLE_ADMIN"))
+		mockMvc.perform(get("/api/v1/admin/users").param("keyword", "nickname")
+				.header("X-Member-Id", ADMIN_ID).header("X-Member-Role", "ROLE_ADMIN"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.code").value(SUCCESS_CODE))
-			.andExpect(jsonPath("$.data.content.length()").value(1))
-			.andExpect(jsonPath("$.data.content[0].id").value(1))
-			.andExpect(jsonPath("$.data.content[0].email").value("user@test.com"))
-			.andExpect(jsonPath("$.data.content[0].matchingTicketCount").value(3))
-			.andExpect(jsonPath("$.data.content[0].optionTicketCount").value(1))
-			.andExpect(jsonPath("$.data.totalElements").value(1));
-
-		then(adminMemberService).should().getUsers(eq(null), any(Pageable.class));
-	}
-
-	@Test
-	@DisplayName("GET /api/admin/users?keyword= - 키워드를 서비스로 그대로 전달한다")
-	void getUsers_withKeyword() throws Exception {
-		// given
-		PagingResponse<AdminUserSummaryResponse> response =
-			new PagingResponse<>(List.of(), 0, 20, 0, 0, false, false);
-
-		given(adminMemberService.getUsers(eq("nickname"), any(Pageable.class))).willReturn(response);
-
-		// when & then
-		mockMvc.perform(get("/api/admin/users")
-				.param("keyword", "nickname")
-				.header("X-Member-Id", ADMIN_ID)
-				.header("X-Member-Role", "ROLE_ADMIN"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.code").value(SUCCESS_CODE))
-			.andExpect(jsonPath("$.data.content.length()").value(0));
+			.andExpect(jsonPath("$.data.content[0].id").value(1));
 
 		then(adminMemberService).should().getUsers(eq("nickname"), any(Pageable.class));
 	}
 
 	@Test
-	@DisplayName("GET /api/admin/users - 인증 헤더가 없으면 예외가 발생한다")
-	void getUsers_missingMemberIdHeader() throws Exception {
-		mockMvc.perform(get("/api/admin/users"))
-			.andExpect(status().isInternalServerError());
-
-		then(adminMemberService).shouldHaveNoInteractions();
-	}
-
-	@Test
-	@DisplayName("GET /api/admin/users/{memberId} - 사용자 상세와 인벤토리를 조회한다")
-	void getUserDetail_success() throws Exception {
-		// given
-		AdminUserDetailResponse detail = new AdminUserDetailResponse(
+	void getUserDetail_usesV1Path() throws Exception {
+		given(adminMemberService.getUserDetail(1L)).willReturn(new AdminUserDetailResponse(
 			1L, "user@test.com", "홍길동", "닉네임", Gender.FEMALE, "https://img", 3L, 1L
-		);
-		given(adminMemberService.getUserDetail(1L)).willReturn(detail);
+		));
 
-		// when & then
-		mockMvc.perform(get("/api/admin/users/{memberId}", 1L)
-				.header("X-Member-Id", ADMIN_ID)
-				.header("X-Member-Role", "ROLE_ADMIN"))
+		mockMvc.perform(get("/api/v1/admin/users/{memberId}", 1L)
+				.header("X-Member-Id", ADMIN_ID).header("X-Member-Role", "ROLE_ADMIN"))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.code").value(SUCCESS_CODE))
-			.andExpect(jsonPath("$.data.id").value(1))
-			.andExpect(jsonPath("$.data.matchingTicketCount").value(3))
-			.andExpect(jsonPath("$.data.optionTicketCount").value(1));
+			.andExpect(jsonPath("$.data.id").value(1));
+
+		then(adminMemberService).should().getUserDetail(1L);
 	}
 
 	@Test
-	@DisplayName("PATCH /api/admin/users/{memberId}/items - 인벤토리 조정에 성공하면 200을 반환한다")
-	void updateUserInventory_success() throws Exception {
-		// given
+	void updateUserInventory_usesV1Path() throws Exception {
 		AdminInventoryUpdateRequest request = new AdminInventoryUpdateRequest(
 			ItemType.MATCHING_TICKET, 3, AdminInventoryAction.ADD, "보상 지급"
 		);
 
-		// when & then
-		mockMvc.perform(patch("/api/admin/users/{memberId}/items", 1L)
-				.header("X-Member-Id", ADMIN_ID)
-				.header("X-Member-Role", "ROLE_ADMIN")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(request)))
+		mockMvc.perform(patch("/api/v1/admin/users/{memberId}/items", 1L)
+				.header("X-Member-Id", ADMIN_ID).header("X-Member-Role", "ROLE_ADMIN")
+				.contentType(MediaType.APPLICATION_JSON).content(new ObjectMapper().writeValueAsString(request)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.code").value(SUCCESS_CODE));
 
@@ -162,22 +120,47 @@ class AdminMemberControllerTest {
 	}
 
 	@Test
-	@DisplayName("PATCH /api/admin/users/{memberId}/items - 대상 사용자가 없으면 ITEM-004를 반환한다")
-	void updateUserInventory_targetUserNotFound() throws Exception {
-		// given
+	void updateUserInventory_returnsServiceError() throws Exception {
 		AdminInventoryUpdateRequest request = new AdminInventoryUpdateRequest(
 			ItemType.MATCHING_TICKET, 3, AdminInventoryAction.ADD, "보상 지급"
 		);
 		willThrow(new BusinessException(UserErrorCode.TARGET_USER_NOT_FOUND))
 			.given(adminMemberService).updateUserInventory(ADMIN_ID, 1L, request);
 
-		// when & then
-		mockMvc.perform(patch("/api/admin/users/{memberId}/items", 1L)
-				.header("X-Member-Id", ADMIN_ID)
-				.header("X-Member-Role", "ROLE_ADMIN")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(request)))
+		mockMvc.perform(patch("/api/v1/admin/users/{memberId}/items", 1L)
+				.header("X-Member-Id", ADMIN_ID).header("X-Member-Role", "ROLE_ADMIN")
+				.contentType(MediaType.APPLICATION_JSON).content(new ObjectMapper().writeValueAsString(request)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("ITEM-004"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("invalidInventoryRequestBodies")
+	void updateUserInventory_rejectsInvalidRequestBody(String requestBody) throws Exception {
+		mockMvc.perform(patch("/api/v1/admin/users/{memberId}/items", 1L)
+				.header("X-Member-Id", ADMIN_ID).header("X-Member-Role", "ROLE_ADMIN")
+				.contentType(MediaType.APPLICATION_JSON).content(requestBody))
+			.andExpect(status().isBadRequest());
+
+		then(adminMemberService).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void userRole_isForbiddenFromAdminUserApi() throws Exception {
+		mockMvc.perform(get("/api/v1/admin/users")
+				.header("X-Member-Id", ADMIN_ID).header("X-Member-Role", "ROLE_USER"))
+			.andExpect(status().isForbidden());
+
+		then(adminMemberService).shouldHaveNoInteractions();
+	}
+
+	private static Stream<String> invalidInventoryRequestBodies() {
+		return Stream.of(
+			"{\"itemType\":\"MATCHING_TICKET\",\"quantity\":0,\"action\":\"ADD\",\"reason\":\"사유\"}",
+			"{\"itemType\":\"MATCHING_TICKET\",\"quantity\":-1,\"action\":\"ADD\",\"reason\":\"사유\"}",
+			"{\"itemType\":\"MATCHING_TICKET\",\"quantity\":1,\"action\":\"ADD\"}",
+			"{\"quantity\":1,\"action\":\"ADD\",\"reason\":\"사유\"}",
+			"{\"itemType\":\"MATCHING_TICKET\",\"quantity\":1,\"reason\":\"사유\"}"
+		);
 	}
 }

@@ -1,3 +1,7 @@
+/*
+ * 관리자 사용자 API가 user-service로 이관되기 전 item-service 구현을 검증하던 테스트다.
+ */
+/*
 package com.comatching.item.domain.admin.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -196,3 +200,4 @@ class AdminUserItemServiceImplTest {
 		};
 	}
 }
+*/

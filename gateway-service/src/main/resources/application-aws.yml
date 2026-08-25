@@ -50,6 +50,13 @@ spring:
               filters:
                 - AuthorizationHeaderFilter
 
+            - id: user-service-admin
+              uri: http://user-service:9000
+              predicates:
+                - Path=/api/v1/admin/users, /api/v1/admin/users/**, /api/v1/admin/notices, /api/v1/admin/notices/**, /api/v1/notices/active
+              filters:
+                - AuthorizationHeaderFilter
+
             - id: user-service-public
               uri: http://user-service:9000
               predicates:
@@ -90,10 +97,31 @@ spring:
               filters:
                 - RewritePath=/chat-doc/(?<segment>.*), /$\{segment}
 
-            - id: item-service
+            - id: item-service-items
               uri: http://item-service:9006
               predicates:
-                - Path=/api/items/**, /api/v1/**
+                - Path=/api/items/**
+              filters:
+                - AuthorizationHeaderFilter
+
+            - id: item-service-shop
+              uri: http://item-service:9006
+              predicates:
+                - Path=/api/v1/shop/**
+              filters:
+                - AuthorizationHeaderFilter
+
+            - id: item-service-admin-shop
+              uri: http://item-service:9006
+              predicates:
+                - Path=/api/v1/admin/shop/**
+              filters:
+                - AuthorizationHeaderFilter
+
+            - id: item-service-admin-payment
+              uri: http://item-service:9006
+              predicates:
+                - Path=/api/v1/admin/payment/**
               filters:
                 - AuthorizationHeaderFilter
 

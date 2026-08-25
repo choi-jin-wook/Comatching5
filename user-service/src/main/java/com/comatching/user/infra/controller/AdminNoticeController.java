@@ -21,7 +21,7 @@ import java.util.List;
 
 @Tag(name = "Notice API", description = "공지사항 등록/수정/삭제 및 조회")
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class AdminNoticeController {
     private final AdminNoticeService adminNoticeService;
